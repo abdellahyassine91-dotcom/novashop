@@ -43,6 +43,4 @@ app.get("/orders", (req, res) => {
   res.json(orders);
 });
 
- app.listen(5001, () => {
-  console.log("Server running on http://localhost:5001");
-});
+ export default app;
