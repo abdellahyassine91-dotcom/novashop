@@ -1,64 +1,43 @@
-import { use, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 import logo from "./assets/novashop.jpeg";
+import { db } from "./firebase";
+import {
+  collection,
+  getDocs,
+  addDoc,
+  deleteDoc,
+  updateDoc,
+  doc,
+} from "firebase/firestore";
 
 const ADMIN_EMAIL = "abdellah.yassine91@gmail.com";
 const ADMIN_PASSWORD = "Sanae1991@1201";
 const WHATSAPP_NUMBER = "212691834768";
 
-const DEFAULT_PRODUCTS = [
-  { id: 1, name: "ساعة ذكية", price: 219, category: "Electronics", image: "" },
-  { id: 2, name: "حقيبة الظهر", price: 199, category: "الملابس", image: "" },
-];
-
-function App() { 
-  const API_URL = "http://localhost:5001";
-  useEffect(() => {
-  fetch(`${API_URL}/products`)
-    .then((res) => res.json())
-    .then((data) => setProducts(data))
-    .catch((err) => console.log(err));
-}, []);
-  useEffect(() => {
-  const saved = localStorage.getItem("isAdmin");
-  if (saved === "true") {
-    setIsAdmin(true);
-    setPage("admin");
-  }
-}, []);
+function App() {
   const [page, setPage] = useState("home");
-  const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem("novashop_admin") === "true");
+  const [isAdmin, setIsAdmin] = useState(
+    () => localStorage.getItem("novashop_admin") === "true"
+  );
   const [email, setEmail] = useState("");
-const [password, setPassword] = useState("");
+  const [password, setPassword] = useState("");
 
   const [products, setProducts] = useState([]);
-   useEffect(() => {
-  fetch(`${API_URL}/products`)
-    .then((res) => res.json())
-    .then((data) => setProducts(data))
-    .catch((err) => console.log(err));
-}, []);
-
   const [cart, setCart] = useState(() => {
     const saved = localStorage.getItem("novashop_cart");
     return saved ? JSON.parse(saved) : [];
   });
-  useEffect(() => {
-  localStorage.setItem("novashop_cart", JSON.stringify(cart));
-}, [cart]);
-
 
   const [orders, setOrders] = useState(() => {
     const saved = localStorage.getItem("novashop_orders");
     return saved ? JSON.parse(saved) : [];
   });
-  useEffect(() => {
-  localStorage.setItem("novashop_orders", JSON.stringify(orders));
-}, [orders]);
- 
+
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState(null);
+
   const [newProduct, setNewProduct] = useState({
     name: "",
     price: "",
@@ -66,6 +45,22 @@ const [password, setPassword] = useState("");
     image: "",
   });
 
+  const fetchProducts = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "products"));
+      const data = querySnapshot.docs.map((document) => ({
+        id: document.id,
+        ...document.data(),
+      }));
+      setProducts(data);
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("novashop_cart", JSON.stringify(cart));
@@ -80,38 +75,35 @@ const [password, setPassword] = useState("");
   }, [isAdmin]);
 
   const totalPrice = useMemo(
-    () => cart.reduce((total, item) => total + Number(item.price), 0),
+    () => cart.reduce((total, item) => total + Number(item.price || 0), 0),
     [cart]
   );
 
-  const filteredProducts = products.filter((product) => {
-    const matchesCategory = selectedCategory === "all" || product.category === selectedCategory;
-    const matchesSearch = product.name.toLowerCase().includes(search.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
-
-  const totalProductsValue = useMemo(
-    () => products.reduce((total, product) => total + Number(product.price), 0),
-    [products]
-  );
-
   const ordersTotal = useMemo(
-    () => orders.reduce((total, order) => total + Number(order.total), 0),
+    () => orders.reduce((total, order) => total + Number(order.total || 0), 0),
     [orders]
   );
 
- 
-  function loginAdmin() {
-  if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-    setIsAdmin(true);
-    setEmail("");
-    setPassword("");
-    setPage("admin");
-    return;
-  }
+  const filteredProducts = products.filter((product) => {
+    const matchesCategory =
+      selectedCategory === "all" || product.category === selectedCategory;
+    const matchesSearch = product.name
+      ?.toLowerCase()
+      .includes(search.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
-  alert("Email ولا كلمة السر خاطئة");
-}
+  function loginAdmin() {
+    if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+      setIsAdmin(true);
+      setEmail("");
+      setPassword("");
+      setPage("admin");
+      return;
+    }
+
+    alert("Email ولا كلمة السر خاطئة");
+  }
 
   function logoutAdmin() {
     setIsAdmin(false);
@@ -130,68 +122,68 @@ const [password, setPassword] = useState("");
   }
 
   function resetProductForm() {
-    setNewProduct({ name: "", price: "", category: "العروض", image: "" });
+    setNewProduct({
+      name: "",
+      price: "",
+      category: "العروض",
+      image: "",
+    });
     setEditingId(null);
   }
 
-  function saveProduct() {
-  if (!newProduct.name.trim() || !newProduct.price) {
-    alert("دخل الاسم والثمن");
-    return;
-  }
-
-  fetch(`${API_URL}/products`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(newProduct),
-  })
-    .then((res) => res.json())
-    .then((data) => {
-      setProducts((prev) => [...prev, data]);
-      resetProductForm();
-    });
+  const saveProduct = async () => {
+    if (!newProduct.name.trim() || !newProduct.price) {
+      alert("دخل الاسم و الثمن");
+      return;
+    }
 
     const productData = {
-      id: editingId || Date.now(),
       name: newProduct.name.trim(),
       price: Number(newProduct.price),
       category: newProduct.category,
       image: newProduct.image,
     };
 
-    if (editingId) {
-      setProducts((current) => current.map((product) => (product.id === editingId ? productData : product)));
-    } else {
-      setProducts((current) => [...current, productData]);
-    }
+    try {
+      if (editingId) {
+        await updateDoc(doc(db, "products", editingId), productData);
+        alert("Product updated ✅");
+      } else {
+        await addDoc(collection(db, "products"), productData);
+        alert("Product added ✅");
+      }
 
-    resetProductForm();
-  }
+      await fetchProducts();
+      resetProductForm();
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  const deleteProduct = async (id) => {
+    if (!confirm("واش متأكد بغيتي تحذف هاد المنتج؟")) return;
+
+    try {
+      await deleteDoc(doc(db, "products", id));
+      setProducts((current) => current.filter((product) => product.id !== id));
+      setCart((current) => current.filter((product) => product.id !== id));
+      alert("Product deleted ✅");
+    } catch (err) {
+      console.log(err);
+    }
+  };
 
   function startEditProduct(product) {
     setEditingId(product.id);
     setNewProduct({
-      name: product.name,
-      price: product.price,
-      category: product.category,
+      name: product.name || "",
+      price: product.price || "",
+      category: product.category || "العروض",
       image: product.image || "",
     });
     setPage("admin");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
-
-   function deleteProduct(id) {
-  if (!confirm("واش متأكد بغيتي تحذف هاد المنتج؟")) return;
-
-  fetch(`${API_URL}/products/${id}`, {
-    method: "DELETE",
-  }).then(() => {
-    setProducts((prev) => prev.filter((p) => p.id !== id));
-    setCart((prev) => prev.filter((p) => p.id !== id));
-  });
-}
 
   function addToCart(product) {
     setCart((current) => [...current, product]);
@@ -213,12 +205,15 @@ const [password, setPassword] = useState("");
       total: totalPrice,
       status: "جديد",
     };
+
     setOrders((current) => [order, ...current]);
     return order;
   }
 
   function updateOrderStatus(id, status) {
-    setOrders((current) => current.map((order) => (order.id === id ? { ...order, status } : order)));
+    setOrders((current) =>
+      current.map((order) => (order.id === id ? { ...order, status } : order))
+    );
   }
 
   function deleteOrder(id) {
@@ -234,10 +229,16 @@ const [password, setPassword] = useState("");
     const order = saveOrder();
     const text =
       `سلام، بغيت نطلب هاد المنتجات. رقم الطلب: ${order.id}\n\n` +
-      cart.map((item, index) => `${index + 1}- ${item.name} - ${item.price} درهم`).join("\n") +
+      cart
+        .map((item, index) => `${index + 1}- ${item.name} - ${item.price} درهم`)
+        .join("\n") +
       `\n\nالمجموع: ${totalPrice} درهم`;
 
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`, "_blank");
+    window.open(
+      `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`,
+      "_blank"
+    );
+
     setCart([]);
   }
 
@@ -245,13 +246,15 @@ const [password, setPassword] = useState("");
     return (
       <section className="admin-login admin-page">
         <h2>🔐 دخول Admin</h2>
-        <p>دخل كلمة السر باش تسير المنتجات والطلبات.</p>
+        <p>دخل Email و كلمة السر باش تسير المنتجات والطلبات.</p>
+
         <input
-  type="email"
-  placeholder="Email"
-  value={email}
-  onChange={(event) => setEmail(event.target.value)}
-/>
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+        />
+
         <input
           type="password"
           placeholder="كلمة السر"
@@ -259,8 +262,8 @@ const [password, setPassword] = useState("");
           onChange={(event) => setPassword(event.target.value)}
           onKeyDown={(event) => event.key === "Enter" && loginAdmin()}
         />
+
         <button onClick={loginAdmin}>دخول</button>
-        <small>كلمة السر التجريبية: admin123</small>
       </section>
     );
   }
@@ -271,37 +274,63 @@ const [password, setPassword] = useState("");
         <div className="admin-header">
           <div>
             <h2>⚙️ Admin Dashboard</h2>
-        
             <p>هنا كتزيد المنتجات، كتعدلها، وكتراقب الطلبات.</p>
           </div>
-          <button className="logout" onClick={logoutAdmin}>خروج</button>
+
+          <button className="logout" onClick={logoutAdmin}>
+            خروج
+          </button>
         </div>
 
         <div className="stats-grid">
-          <div className="stat-card"><span>📦 المنتجات</span><strong>{products.length}</strong></div>
-          <div className="stat-card"><span>🛒 السلة</span><strong>{cart.length}</strong></div>
-          <div className="stat-card"><span>📑 الطلبات</span><strong>{orders.length}</strong></div>
-          <div className="stat-card"><span>💰 مجموع الطلبات</span><strong>{ordersTotal} dh</strong></div>
+          <div className="stat-card">
+            <span>📦 المنتجات</span>
+            <strong>{products.length}</strong>
+          </div>
+
+          <div className="stat-card">
+            <span>🛒 السلة</span>
+            <strong>{cart.length}</strong>
+          </div>
+
+          <div className="stat-card">
+            <span>📑 الطلبات</span>
+            <strong>{orders.length}</strong>
+          </div>
+
+          <div className="stat-card">
+            <span>💰 مجموع الطلبات</span>
+            <strong>{ordersTotal} dh</strong>
+          </div>
         </div>
 
         <div className="admin-layout">
           <div className="admin-card">
             <h3>{editingId ? "✏️ تعديل المنتج" : "➕ إضافة منتج"}</h3>
+
             <div className="form admin-form">
               <input
                 placeholder="اسم المنتج"
                 value={newProduct.name}
-                onChange={(event) => setNewProduct({ ...newProduct, name: event.target.value })}
+                onChange={(event) =>
+                  setNewProduct({ ...newProduct, name: event.target.value })
+                }
               />
+
               <input
                 type="number"
                 placeholder="الثمن"
                 value={newProduct.price}
-                onChange={(event) => setNewProduct({ ...newProduct, price: event.target.value })}
+                onChange={(event) =>
+                  setNewProduct({ ...newProduct, price: event.target.value })
+                }
               />
+
               <select
                 value={newProduct.category}
-                onChange={(event) => setNewProduct({ ...newProduct, category: event.target.value })}
+                onChange={(event) =>
+                  setNewProduct({ ...newProduct, category: event.target.value })
+                }
               >
                 <option>العروض</option>
                 <option>Electronics</option>
@@ -309,22 +338,48 @@ const [password, setPassword] = useState("");
                 <option>Beauty</option>
                 <option>Home</option>
               </select>
+
               <input type="file" accept="image/*" onChange={handleImage} />
-              {newProduct.image && <img className="preview-img" src={newProduct.image} alt="preview" />}
-              <button onClick={saveProduct}>{editingId ? "حفظ التعديل" : "إضافة المنتج"}</button>
-              {editingId && <button className="cancel-btn" onClick={resetProductForm}>إلغاء التعديل</button>}
+
+              {newProduct.image && (
+                <img
+                  className="preview-img"
+                  src={newProduct.image}
+                  alt="preview"
+                />
+              )}
+
+              <button onClick={saveProduct}>
+                {editingId ? "حفظ التعديل" : "إضافة المنتج"}
+              </button>
+
+              {editingId && (
+                <button className="cancel-btn" onClick={resetProductForm}>
+                  إلغاء التعديل
+                </button>
+              )}
             </div>
           </div>
 
           <div className="admin-card">
             <h3>📋 لائحة المنتجات</h3>
+
             <div className="admin-table">
               {products.map((product) => (
                 <div className="admin-row" key={product.id}>
                   <span>{product.name}</span>
                   <span>{product.price} dh</span>
-                  <button onClick={() => startEditProduct(product)}>تعديل</button>
-                  <button className="danger" onClick={() => deleteProduct(product.id)}>حذف</button>
+
+                  <button onClick={() => startEditProduct(product)}>
+                    تعديل
+                  </button>
+
+                  <button
+                    className="danger"
+                    onClick={() => deleteProduct(product.id)}
+                  >
+                    حذف
+                  </button>
                 </div>
               ))}
             </div>
@@ -333,6 +388,7 @@ const [password, setPassword] = useState("");
 
         <div className="admin-card orders-card">
           <h3>📦 الطلبات</h3>
+
           {orders.length === 0 ? (
             <p>ما كاين حتى طلب دابا.</p>
           ) : (
@@ -344,13 +400,22 @@ const [password, setPassword] = useState("");
                   <p>{order.items.map((item) => item.name).join("، ")}</p>
                   <b>{order.total} dh</b>
                 </div>
-                <select value={order.status} onChange={(event) => updateOrderStatus(order.id, event.target.value)}>
+
+                <select
+                  value={order.status}
+                  onChange={(event) =>
+                    updateOrderStatus(order.id, event.target.value)
+                  }
+                >
                   <option>جديد</option>
                   <option>قيد المعالجة</option>
                   <option>تم الإرسال</option>
                   <option>ملغي</option>
                 </select>
-                <button className="danger" onClick={() => deleteOrder(order.id)}>حذف</button>
+
+                <button className="danger" onClick={() => deleteOrder(order.id)}>
+                  حذف
+                </button>
               </div>
             ))
           )}
@@ -364,42 +429,61 @@ const [password, setPassword] = useState("");
       <nav className="navbar">
         <div className="nav-left">
           <img src={logo} alt="NovaShop" className="logo" />
-
         </div>
+
         <ul className="nav-center">
           <li onClick={() => setPage("home")}>Home</li>
-          <li onClick={() => window.scrollTo({ top: 650, behavior: "smooth" })}>Shop</li>
-          <li onClick={() => window.scrollTo({ top: 950, behavior: "smooth" })}>Categories</li>
-          <li onClick={() => alert("WhatsApp: +" + WHATSAPP_NUMBER)}>Contact</li>
+          <li onClick={() => window.scrollTo({ top: 650, behavior: "smooth" })}>
+            Shop
+          </li>
+          <li onClick={() => window.scrollTo({ top: 950, behavior: "smooth" })}>
+            Categories
+          </li>
+          <li onClick={() => alert("WhatsApp: +" + WHATSAPP_NUMBER)}>
+            Contact
+          </li>
           <li onClick={() => setPage("admin")}>Admin</li>
         </ul>
+
         <div className="nav-right">
           <span className="cart">🛒 {cart.length}</span>
         </div>
       </nav>
-<a
-  href="https://wa.me/212691834768"
-  target="_blank"
-  rel="noopener noreferrer"
-  className="whatsapp-float"
->
-  💬
-</a>
+
+      <a
+        href="https://wa.me/212691834768"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="whatsapp-float"
+      >
+        💬
+      </a>
 
       {page === "admin" ? (
-        isAdmin ? renderAdminDashboard() : renderAdminLogin()
+        isAdmin ? (
+          renderAdminDashboard()
+        ) : (
+          renderAdminLogin()
+        )
       ) : (
         <>
           <section className="hero">
             <div className="hero-content">
               <h1>NovaShop 🔥</h1>
               <p>أفضل العروض في مكان واحد</p>
-              <button onClick={() => window.scrollTo({ top: 650, behavior: "smooth" })}>تسوق الآن</button>
+              <button
+                onClick={() =>
+                  window.scrollTo({ top: 650, behavior: "smooth" })
+                }
+              >
+                تسوق الآن
+              </button>
             </div>
           </section>
 
           <section className="cart-box">
             <h3>🛒 السلة</h3>
+
             {cart.length === 0 ? (
               <p>السلة فارغة</p>
             ) : (
@@ -411,27 +495,46 @@ const [password, setPassword] = useState("");
                     <button onClick={() => removeFromCart(index)}>❌</button>
                   </div>
                 ))}
+
                 <h4>المجموع: {totalPrice} درهم</h4>
-                <button className="whatsapp-btn" onClick={sendOrderWhatsApp}>طلب عبر WhatsApp</button>
-                <button className="clear-btn" onClick={clearCart}>إفراغ السلة</button>
+
+                <button className="whatsapp-btn" onClick={sendOrderWhatsApp}>
+                  طلب عبر WhatsApp
+                </button>
+
+                <button className="clear-btn" onClick={clearCart}>
+                  إفراغ السلة
+                </button>
               </>
             )}
           </section>
 
           <section className="categories-section">
             <h2>تسوق حسب الفئة</h2>
+
             <div className="categories-grid">
               <button onClick={() => setSelectedCategory("all")}>🛍️ الكل</button>
-              <button onClick={() => setSelectedCategory("العروض")}>🔥 العروض</button>
-              <button onClick={() => setSelectedCategory("Electronics")}>📱 Electronics</button>
-              <button onClick={() => setSelectedCategory("الملابس")}>👕 الملابس</button>
-              <button onClick={() => setSelectedCategory("Beauty")}>💄 Beauty</button>
-              <button onClick={() => setSelectedCategory("Home")}>🏠 Home</button>
+              <button onClick={() => setSelectedCategory("العروض")}>
+                🔥 العروض
+              </button>
+              <button onClick={() => setSelectedCategory("Electronics")}>
+                📱 Electronics
+              </button>
+              <button onClick={() => setSelectedCategory("الملابس")}>
+                👕 الملابس
+              </button>
+              <button onClick={() => setSelectedCategory("Beauty")}>
+                💄 Beauty
+              </button>
+              <button onClick={() => setSelectedCategory("Home")}>
+                🏠 Home
+              </button>
             </div>
           </section>
 
           <main className="products-section">
             <h2>المنتجات 🛍️</h2>
+
             <input
               className="search-input"
               type="text"
@@ -439,22 +542,46 @@ const [password, setPassword] = useState("");
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
+
             <div className="products">
               {filteredProducts.length === 0 ? (
                 <p>ما كاين حتى منتج</p>
               ) : (
                 filteredProducts.map((product) => (
                   <div className="card" key={product.id}>
-                    {product.image ? <img src={product.image} alt={product.name} /> : <div className="no-image">📦</div>}
+                    {product.image ? (
+                      <img src={product.image} alt={product.name} />
+                    ) : (
+                      <div className="no-image">📦</div>
+                    )}
+
                     <div className="card-content">
                       <span className="category">{product.category}</span>
                       <h3>{product.name}</h3>
                       <p className="price">{product.price} درهم</p>
-                      <button className="btn" onClick={() => addToCart(product)}>إضافة للسلة</button>
+
+                      <button
+                        className="btn"
+                        onClick={() => addToCart(product)}
+                      >
+                        إضافة للسلة
+                      </button>
+
                       {isAdmin && (
                         <>
-                          <button className="edit-btn" onClick={() => startEditProduct(product)}>تعديل</button>
-                          <button className="delete" onClick={() => deleteProduct(product.id)}>حذف المنتج</button>
+                          <button
+                            className="edit-btn"
+                            onClick={() => startEditProduct(product)}
+                          >
+                            تعديل
+                          </button>
+
+                          <button
+                            className="delete"
+                            onClick={() => deleteProduct(product.id)}
+                          >
+                            حذف المنتج
+                          </button>
                         </>
                       )}
                     </div>
