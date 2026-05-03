@@ -364,6 +364,7 @@ const [password, setPassword] = useState("");
       <nav className="navbar">
         <div className="nav-left">
           <img src={logo} alt="NovaShop" className="logo" />
+
         </div>
         <ul className="nav-center">
           <li onClick={() => setPage("home")}>Home</li>
@@ -376,6 +377,14 @@ const [password, setPassword] = useState("");
           <span className="cart">🛒 {cart.length}</span>
         </div>
       </nav>
+<a
+  href="https://wa.me/212691834768"
+  target="_blank"
+  rel="noopener noreferrer"
+  className="whatsapp-float"
+>
+  💬
+</a>
 
       {page === "admin" ? (
         isAdmin ? renderAdminDashboard() : renderAdminLogin()

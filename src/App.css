@@ -757,3 +757,15 @@ footer {
     grid-template-columns: 1fr;
   }
 }
+.whatsapp-float {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #25d366;
+  color: white;
+  font-size: 20px;
+  padding: 14px;
+  border-radius: 50%;
+  text-decoration: none;
+  z-index: 9999;
+}
